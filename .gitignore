@@ -174,4 +174,5 @@ cython_debug/
 *.vsix
 config.json
 *.db
-*db-shm
+*.db-shm
+*.db-wal
