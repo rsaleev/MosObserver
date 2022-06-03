@@ -7,12 +7,13 @@ import json
 
 from pathlib import Path
 
+from datetime import timedelta, date
+
 from tortoise.exceptions import IntegrityError
 from tortoise.expressions import Q, F
 
 from mosobserver.database.models.portal import Organization
 from mosobserver.portal.client import Client
-
 from mosobserver.portal.models.documents import DocumentItem
 
 
@@ -30,28 +31,66 @@ class PortalPoller:
                 continue
 
     @classmethod
-    async def check_single(cls, org: Organization) -> List[DocumentItem] | list:
+    async def fetch(cls, org: Organization) -> List[DocumentItem] | list:
         output = []
-        docs = await Client.fetch_documents(int(org.guid))
-        if items := docs.items:
-            if org.checked:
-                data = [
-                    item
-                    for item in items
-                    if item.date_published
-                    and item.date_published.timestamp() > org.checked.timestamp()
-                ]
-                
-                
+        try:
+            docs = await Client.fetch_documents(int(org.guid))
+        except:
+            return output
+        else:
+            if items := docs.items:
+                output.extend(items)
+            org.checked = datetime.now()
+            await org.save()
+            return output
+
+    @classmethod
+    async def check_all(cls):
+        organizations: List[Organization] = await Organization.all()
+        output = []
+        for org in organizations:
+            items: List[DocumentItem] = await cls.fetch(org)
+            if org.checked is None:
+                output.extend(
+                    [
+                        (org, item)
+                        for item in items
+                        if item.date_published >= (datetime.now() - timedelta(days=3))
+                    ]
+                )
             else:
                 output.extend(
                     [
-                        item
+                        (org, item)
                         for item in items
-                        if item.date_published
-                        and (datetime.now() - item.date_published).days <= 3
+                        if item.date_published.day >= org.checked.day
                     ]
                 )
-        org.checked = datetime.now()
-        await org.save()
+        return output
+
+    @classmethod
+    async def check_date(cls, date: date):
+        organizations: List[Organization] = await Organization.all()
+        output = []
+        for org in organizations:
+            items: List[DocumentItem] = await cls.fetch(org)
+            output.extend(
+                [(org, item) for item in items if item.date_published.date() >= date]
+            )
+        return output
+
+    @classmethod
+    async def check_delta(cls, delta: int):
+        organizations: List[Organization] = await Organization.all()
+        output = []
+        for org in organizations:
+            items: List[DocumentItem] = await cls.fetch(org)
+            output.extend(
+                [
+                    (org, item)
+                    for item in items
+                    if item.date_published.date()
+                    >= (datetime.now() - timedelta(days=delta)).date()
+                ]
+            )
         return output
