@@ -5,8 +5,10 @@ import asyncio
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types
+from aiogram.dispatcher import FSMContext
 import aiogram.utils.markdown as fmt
 from tortoise.expressions import Q, F
+from dateutil import parser as dp
 
 from mosobserver.portal.models.documents import DocumentItem
 from mosobserver.database.models.portal import Organization
@@ -64,27 +66,9 @@ class TelegramBotNotifier:
     @classmethod
     async def check_handler(cls, event: types.Message):
         await event.answer("Начата проверка")
-        organizations: List[Organization] = await Organization.all()
-        for org in organizations:
-            items: List[DocumentItem] = await PortalPoller.check_single(org)
-            output = []
-            if org.checked is None:
-                output.extend(
-                    [
-                        item
-                        for item in items
-                        if item.date_published >= (datetime.now() - timedelta(days=3))
-                    ]
-                )
-            else:
-                output.extend(
-                    [
-                        item
-                        for item in items
-                        if item.date_published.day >= org.checked.day
-                    ]
-                )
-            for item in output:
+        output = await PortalPoller.check_all()
+        for org, item in output:
+            try:
                 await event.answer(
                     fmt.text(
                         fmt.text(fmt.bold("Организация: "), org.title),
@@ -106,14 +90,115 @@ class TelegramBotNotifier:
                     ),
                     parse_mode=types.ParseMode.MARKDOWN,
                 )
+                await asyncio.sleep(1)
+            except:
+                await asyncio.sleep(1)
+                continue
         await event.answer("Проверка закончена")
 
     @classmethod
+    async def delta_handler(cls, event: types.Message):
+        args = event.get_args()
+        if not args:
+            await event.answer(
+                f"Неверная команада.Требуется ввести интервал (кол-во дней)"
+            )
+        else:
+            delta = int(args)
+            await event.answer(f"Начата проверка за {delta} дней")
+
+            output = await PortalPoller.check_delta(delta)
+            for org, item in output:
+                try:
+                    await event.answer(
+                        fmt.text(
+                            fmt.text(fmt.bold("Организация: "), org.title),
+                            fmt.text(
+                                fmt.italic("Дата публикации: "),
+                                item.date_published.strftime("%d-%m-%Y %H:%M:%S"),
+                            ),
+                            fmt.text("Название документа: ", item.title),
+                            fmt.text(
+                                "Ссылки на скачивание: ",
+                                *[
+                                    fmt.link(title="Скачать", url=attachment.url)
+                                    for attachment in item.attachments
+                                    if attachment and attachment != ""
+                                ],
+                                sep="\n",
+                            ),
+                            sep="\n\n",
+                        ),
+                        parse_mode=types.ParseMode.MARKDOWN,
+                    )
+
+                    await asyncio.sleep(1)
+                except:
+                    await asyncio.sleep(1)
+                    continue
+
+            await event.answer("Проверка закончена")
+
+    @classmethod
+    async def date_handler(cls, event: types.Message):
+        args = event.get_args()
+        if not args:
+            await event.answer(
+                f"Неверная команада.Требуется ввести интервал (кол-во дней)"
+            )
+        else:
+            date = dp.parse(args)
+            await event.answer(f"Начата проверка c даты {date.strftime('%d.%m.%Y')}")
+            output = await PortalPoller.check_date(date.date())
+            for org, item in output:
+                try:
+                    await event.answer(
+                        fmt.text(
+                            fmt.text(fmt.bold("Организация: "), org.title),
+                            fmt.text(
+                                fmt.italic("Дата публикации: "),
+                                item.date_published.strftime("%d-%m-%Y %H:%M:%S"),
+                            ),
+                            fmt.text("Название документа: ", item.title),
+                            fmt.text(
+                                "Ссылки на скачивание: ",
+                                *[
+                                    fmt.link(title="Скачать", url=attachment.url)
+                                    for attachment in item.attachments
+                                    if attachment and attachment != ""
+                                ],
+                                sep="\n",
+                            ),
+                            sep="\n\n",
+                        ),
+                        parse_mode=types.ParseMode.MARKDOWN,
+                    )
+                    await asyncio.sleep(1)
+                except:
+                    await asyncio.sleep(1)
+                    continue
+            await event.answer("Проверка закончена")
+
+    @classmethod
     async def init(cls):
-        cls.disp.register_message_handler(cls.start_handler, commands={"start"})
-        cls.disp.register_message_handler(cls.help_handler, commands={"help"})
-        cls.disp.register_message_handler(cls.orglist_handler, commands={"orglist"})
-        cls.disp.register_message_handler(cls.check_handler, commands={"check"})
+        cls.disp.register_message_handler(cls.start_handler, commands=["start"])
+        cls.disp.register_message_handler(
+            cls.help_handler, commands=["help"], regexp=r"^/help"
+        )
+        cls.disp.register_message_handler(
+            cls.orglist_handler, commands=["orglist"], regexp=r"^/orglist$"
+        )
+        cls.disp.register_message_handler(
+            cls.check_handler, commands=["check"], regexp=r"^/check$"
+        )
+        cls.disp.register_message_handler(
+            cls.delta_handler, commands=["delta"], regexp=r"^/delta\s\d{1,2}$"
+        )
+        cls.disp.register_message_handler(
+            cls.date_handler,
+            commands=["date"],
+            regexp=r"^/date\s\d{1,2}.\d{1,2}.\d{2,4}$",
+        )
 
     @classmethod
     async def stop(cls):
@@ -122,4 +207,4 @@ class TelegramBotNotifier:
     @classmethod
     async def start(cls):
         await cls.init()
-        await cls.disp.start_polling(relax=2)
+        await cls.disp.start_polling(relax=1)
