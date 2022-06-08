@@ -13,6 +13,7 @@ from dateutil import parser as dp
 from mosobserver.portal.models.documents import DocumentItem
 from mosobserver.database.models.portal import Organization
 from mosobserver.portal.poller import PortalPoller
+from mosobserver.notifier.telegram.authorization import AuthMiddleware
 
 
 class TelegramBotNotifier:
@@ -181,6 +182,7 @@ class TelegramBotNotifier:
 
     @classmethod
     async def init(cls):
+        cls.disp.setup_middleware(AuthMiddleware())
         cls.disp.register_message_handler(
             cls.start_handler, commands=["start"], regexp=r"^/start$"
         )
