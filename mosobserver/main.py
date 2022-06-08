@@ -7,7 +7,7 @@ import asyncio
 import uvloop
 
 from mosobserver.portal.poller import PortalPoller
-from mosobserver.notifier.tlgrm import TelegramBotNotifier
+from mosobserver.notifier.telegram.client import TelegramBotNotifier
 from mosobserver.database.connector import DBConnector
 
 
