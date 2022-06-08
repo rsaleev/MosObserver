@@ -40,36 +40,36 @@ class TelegramBotNotifier:
         return "\n".join(shorten), "\n".join(leftovers)
 
     @classmethod
-    async def start_handler(cls, event: types.Message):
-        await event.answer(
+    async def start_handler(cls, msg: types.Message):
+        await msg.answer(
             f"Бот запущен",
             parse_mode=types.ParseMode.HTML,
         )
-        cls.chats.append(event.chat.id)
+        cls.chats.append(msg.chat.id)
 
     @classmethod
-    async def help_handler(cls, event: types.Message):
+    async def help_handler(cls, msg: types.Message):
         output = "\n".join([" - ".join(cmd) for cmd in cls.commands])
-        await event.answer(f"Список команд:\n{output}")
+        await msg.answer(f"Список команд:\n{output}")
 
     @classmethod
-    async def orglist_handler(cls, event: types.Message):
+    async def orglist_handler(cls, msg: types.Message):
         orgs = await Organization.all()
         output = "\n".join([f"{org.id}.{org.title} ({org.guid})" for org in orgs])
         if len(output) >= 4096:
             shorten, leftovers = cls.shorten_msg(output)
-            await event.answer(f"{shorten}")
-            await event.answer(f"{leftovers}")
+            await msg.answer(f"{shorten}")
+            await msg.answer(f"{leftovers}")
         else:
-            await event.answer(f"{output}")
+            await msg.answer(f"{output}")
 
     @classmethod
-    async def check_handler(cls, event: types.Message):
-        await event.answer("Начата проверка")
+    async def check_handler(cls, msg: types.Message):
+        await msg.answer("Начата проверка")
         output = await PortalPoller.check_all()
         for org, item in output:
             try:
-                await event.answer(
+                await msg.answer(
                     fmt.text(
                         fmt.text(fmt.bold("Организация: "), org.title),
                         fmt.text(
@@ -94,23 +94,23 @@ class TelegramBotNotifier:
             except:
                 await asyncio.sleep(1)
                 continue
-        await event.answer("Проверка закончена")
+        await msg.answer("Проверка закончена")
 
     @classmethod
-    async def delta_handler(cls, event: types.Message):
-        args = event.get_args()
+    async def delta_handler(cls, msg: types.Message):
+        args = msg.get_args()
         if not args:
-            await event.answer(
+            await msg.answer(
                 f"Неверная команада.Требуется ввести интервал (кол-во дней)"
             )
         else:
             delta = int(args)
-            await event.answer(f"Начата проверка за {delta} дней")
+            await msg.answer(f"Начата проверка за {delta} дней")
 
             output = await PortalPoller.check_delta(delta)
             for org, item in output:
                 try:
-                    await event.answer(
+                    await msg.answer(
                         fmt.text(
                             fmt.text(fmt.bold("Организация: "), org.title),
                             fmt.text(
@@ -137,22 +137,22 @@ class TelegramBotNotifier:
                     await asyncio.sleep(1)
                     continue
 
-            await event.answer("Проверка закончена")
+            await msg.answer("Проверка закончена")
 
     @classmethod
-    async def date_handler(cls, event: types.Message):
-        args = event.get_args()
+    async def date_handler(cls, msg: types.Message):
+        args = msg.get_args()
         if not args:
-            await event.answer(
+            await msg.answer(
                 f"Неверная команада.Требуется ввести интервал (кол-во дней)"
             )
         else:
             date = dp.parse(args)
-            await event.answer(f"Начата проверка c даты {date.strftime('%d.%m.%Y')}")
+            await msg.answer(f"Начата проверка c даты {date.strftime('%d.%m.%Y')}")
             output = await PortalPoller.check_date(date.date())
             for org, item in output:
                 try:
-                    await event.answer(
+                    await msg.answer(
                         fmt.text(
                             fmt.text(fmt.bold("Организация: "), org.title),
                             fmt.text(
@@ -177,13 +177,15 @@ class TelegramBotNotifier:
                 except:
                     await asyncio.sleep(1)
                     continue
-            await event.answer("Проверка закончена")
+            await msg.answer("Проверка закончена")
 
     @classmethod
     async def init(cls):
-        cls.disp.register_message_handler(cls.start_handler, commands=["start"])
         cls.disp.register_message_handler(
-            cls.help_handler, commands=["help"], regexp=r"^/help"
+            cls.start_handler, commands=["start"], regexp=r"^/start$"
+        )
+        cls.disp.register_message_handler(
+            cls.help_handler, commands=["help"], regexp=r"^/help$"
         )
         cls.disp.register_message_handler(
             cls.orglist_handler, commands=["orglist"], regexp=r"^/orglist$"
